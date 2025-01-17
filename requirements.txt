@@ -1,0 +1,6 @@
+# import pdb
+# pdb.set_trace()
+
+jupyter
+matplotlib
+inferactively-pymdp
