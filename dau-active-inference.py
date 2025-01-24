@@ -1,31 +1,8 @@
-# %% [markdown]
-# # **Designer-Artifact-User multi-agent system**
+##################################################################
+## Designer-Artifact-User multi-agent active inference demo system
+##################################################################
 
-# %%
-#| hide
-# BASED ON
-    # Designer-Artifact-User_LUCA^v6.ipynb
-    # Designer-Artifact-User_LUCA^v5.ipynb
-    # Designer-Artifact-User_LUCA^v4.ipynb
-    # Designer-Artifact-User_LUCA^v3.ipynb
-    
-# DONE
-# v4 starts ------------------------------------------------
-# 4.5.6.1.1	Add action from User to Artifact
-# 4.5.6.1.2	Add observation from Artifact to User
-# 4.5.6.1.3	Visualize
-# v5 starts ------------------------------------------------
-# 4.5.6.1.4	Redo indexing of variables due to name clashes
-# 4.5.6.1.5	Update section 1 diagram
-# 4.5.6.1.6	Update section 1 symbol descriptions
-# v6 starts ------------------------------------------------
-# 4.5.6.1.7	Update the User agent's environment dynamics to a non-parametric model
-# v7 starts ------------------------------------------------
-
-# TODO
-
-
-# %%
+## imports
 import numpy as np
 import copy
 
@@ -42,9 +19,9 @@ import random
 import argparse
 import matplotlib
 matplotlib.use("Agg") ## Use a non-GUI backend
-# %%
+
 ## ?utils.get_model_dimensions_from_labels
-## rewrite the pyMDP method to allow for shorter names so that the labels 
+## rewrite this pyMDP method to allow for shorter names so that the labels 
 ## dictionary can be used more easily when setting up the matrices
 def get_model_dimensions_from_labels(model_labels):
     modalities = model_labels['y']
@@ -63,181 +40,11 @@ def get_model_dimensions_from_labels(model_labels):
     else:
         return num_obs, num_modalities, num_states, num_factors
 
-# %% [markdown]
-# # 1 Summary of entity interactions
-# The following diagram is a representation of the interactions between the entities in this project. 
 
-# %% [markdown]
-# ![](./designer-artifact-user3.png)
+#################################################################
+## Designer agent
+#################################################################
 
-# %% [markdown]
-# The Designer entity's agent has symbols:
-# 
-# - $a^{\mathrm{DsgArt}}$ is the action from the Designer entity's agent to the Artifact entity's environment segment
-# - $u^{\mathrm{ArtDsg}}$ is the inferred control states of the Artifact entity's environment segment
-# - $\theta^{\mathrm{ArtDsg}}$ is the inferred parameters of the Artifact entity's environment segment
-# - $s^{\mathrm{ArtDsg}}$ is the inferred state of the Artifact entity's environment segment
-# - $\theta^{\mathrm{UsrDsg}}$ is the inferred parameters of the User entity's environment segment
-# - $s^{\mathrm{UsrDsg}}$ is the inferred state of the User entity's environment segment
-# 
-# The Designer entity's environment has symbols:
-# 
-# - from Artifact's environment segment:
-#     - $y^{\mathrm{ArtDsg}}$ is the observation from the Artifact entity's environment segment
-#     - $\breve\theta^{\mathrm{ArtDsg}}$ is the true parameters of the Artifact entity
-#     - $\breve s^{\mathrm{ArtDsg}}$ is the true state of the Artifact entity
-#     - $W^{\mathrm{Art}}$ is the exogenous information impacting the Artifact entity
-# - from User's environment segment:
-#     - $y^{\mathrm{UsrDsg}}$ is the observation from the User entity's environment segment
-#     - $\breve\theta^{\mathrm{UsrDsg}}$ is the true parameters of the User entity
-#     - $\breve s^{\mathrm{UsrDsg}}$ is the true state of the User entity
-
-# %% [markdown]
-# The Artifact entity's agent has symbols:
-# 
-# - $a^{\mathrm{ArtUsr}}$ is the action from the Artifact entity's agent to the User entity's environment segment
-# - $u^{\mathrm{UsrArt}}$ is the inferred control states of the User entity's environment segment
-# - $\theta^{\mathrm{UsrArt}}$ is the inferred parameters of the User entity's environment segment
-# - $s^{\mathrm{UsrArt}}$ is the inferred state of the User entity's environment segment
-# 
-# The Artifact entity's environment has symbols:
-# 
-# - from User's environment segment:
-#     - $y^{\mathrm{UsrArt}}$ is the observation from the User entity's environment segment
-#     - $\breve\theta^{\mathrm{UsrArt}}$ is the true parameters of the User entity
-#     - $\breve s^{\mathrm{UsrArt}}$ is the true state of the User entity
-#     - $W^{\mathrm{Usr}}$ is the exogenous information impacting the User entity
-
-# %% [markdown]
-# The User entity's agent has symbols:
-# 
-# - $a^{\mathrm{UsrArt}}$ is the action from the User entity's agent to the Artifact entity's environment segment
-# - $u^{\mathrm{ArtUsr}}$ is the inferred control states of the Artifact entity's environment segment
-# - $\theta^{\mathrm{ArtUsr}}$ is the inferred parameters of the Artifact entity's environment segment
-# - $s^{\mathrm{ArtUsr}}$ is the inferred state of the User entity's environment segment
-# 
-# The User entity's environment has symbols:
-# 
-# - from Artifact's environment segment:
-#     - $y^{\mathrm{ArtUsr}}$ is the observation from the Artifact entity's environment segment
-#     - $\breve\theta^{\mathrm{ArtUsr}}$ is the true parameters of the Artifact entity
-#     - $\breve s^{\mathrm{ArtUsr}}$ is the true state of the Artifact entity
-#     - $W^{\mathrm{Art}}$ is the exogenous information impacting the Artifact entity
-
-# %% [markdown]
-# # 2 Entity interactions
-
-# %% [markdown]
-# ## 2.1 Designer agent
-# This is the Designer agent's *generative model* for its environment.
-
-# %% [markdown]
-# ### 2.1.1 State factors
-# The inferred state factors from the Designer's environment are:
-# 
-# - $s^{\mathrm{ArtDsg}}_1$ (EYE_TRACKING)
-# - $s^{\mathrm{ArtDsg}}_2$ (TIME_ON_TASK)
-# - $s^{\mathrm{ArtDsg}}_3$ (UI_FEATURES) [LATER]
-# - $s^{\mathrm{ArtDsg}}_4$ (PERFORMANCE) [LATER]
-# - $s^{\mathrm{UsrDsg}}_1$ (FEEDBACK) [LATER]
-# 
-# #### 2.1.1.1 $s^{\mathrm{ArtDsg}}_1$ (EYE_TRACKING)
-# It has two possible values:
-# 
-# - $s^{\mathrm{ArtDsg}}_1 = 0$, `FOCUSED`
-# - $s^{\mathrm{ArtDsg}}_1 = 1$, `SCATTERED`
-# 
-# #### 2.1.1.2 $s^{\mathrm{Art}}_2$ (TIME_ON_TASK)
-# It has three possible values:
-# 
-# - $s^{\mathrm{ArtDsg}}_2 = 0$, `SHORT`
-# - $s^{\mathrm{ArtDsg}}_2 = 1$, `MEDIUM`
-# - $s^{\mathrm{ArtDsg}}_2 = 2$, `LONG`
-# 
-# #### 2.1.1.3 $s^{\mathrm{ArtDsg}}_3$ (UI_FEATURES) [LATER]
-# It has three possible values: 
-# 
-# - $s^{\mathrm{ArtDsg}}_3 = 0$, `MINIMAL`
-# - $s^{\mathrm{ArtDsg}}_3 = 1$, `STANDARD`
-# - $s^{\mathrm{ArtDsg}}_3 = 2$, `ADVANCED`
-# 
-# #### 2.1.1.4 $s^{\mathrm{ArtDsg}}_4$ (PERFORMANCE) [LATER]
-# It has three possible values:
-# 
-# - $s^{\mathrm{ArtDsg}}_4 = 0$, `LOW`
-# - $s^{\mathrm{ArtDsg}}_4 = 1$, `MEDIUM`
-# - $s^{\mathrm{ArtDsg}}_4 = 2$, `HIGH`
-# 
-# #### 2.1.1.5 $s^{\mathrm{UsrDsg}}_1$ (FEEDBACK) [LATER]
-# It has two possible values:
-# 
-# - $s^{\mathrm{UsrDsg}}_1 = 0$, `POSITIVE`
-# - $s^{\mathrm{UsrDsg}}_1 = 1$, `NEGATIVE`
-
-# %% [markdown]
-# ### 2.1.2 Observation modalities 
-# The observed observation modalities from the Designer's environment (inputs to the Designer agent) are:
-# 
-# - $y^{\mathrm{ArtDsg}}_1$ (EYE_TRACKING_OBS)
-# - $y^{\mathrm{ArtDsg}}_2$ (TIME_ON_TASK_OBS)
-# - $y^{\mathrm{ArtDsg}}_3$ (UI_FEATURES_OBS)
-# - $y^{\mathrm{ArtDsg}}_4$ (PERFORMANCE_OBS) [LATER]
-# - $y^{\mathrm{UsrDsg}}_1$ (FEEDBACK_OBS) [LATER]
-# 
-# #### 2.1.2.1 $y^{\mathrm{ArtDsg}}_1$ (EYE_TRACKING_OBS)
-# It has three possible values:
-# 
-# - $y^{\mathrm{ArtDsg}}_1 = 0$, `FOCUSED_OBS`
-# - $y^{\mathrm{ArtDsg}}_1 = 1$, `SCATTERED_OBS`
-# - $y^{\mathrm{ArtDsg}}_1 = 2$, `NEUTRAL_OBS`
-# 
-# #### 2.1.2.2 $y^{\mathrm{ArtDsg}}_2$ (TIME_ON_TASK_OBS)
-# It has three possible values:
-# 
-# - $y^{\mathrm{ArtDsg}}_2 = 0$, `SHORT_OBS`
-# - $y^{\mathrm{ArtDsg}}_2 = 1$, `MEDIUM_OBS`
-# - $y^{\mathrm{ArtDsg}}_2 = 2$, `LONG_OBS`
-# 
-# #### 2.1.2.3 $y^{\mathrm{ArtDsg}}_3$ (UI_FEATURES_OBS)
-# It has three possible values: 
-# 
-# - $y^{\mathrm{ArtDsg}}_3 = 0$, `MINIMAL_OBS`
-# - $y^{\mathrm{ArtDsg}}_3 = 1$, `STANDARD_OBS`
-# - $y^{\mathrm{ArtDsg}}_3 = 2$, `ADVANCED_OBS`
-# 
-# #### 2.1.2.4 $y^{\mathrm{ArtDsg}}_4$ (PERFORMANCE_OBS) [LATER]
-# It has three possible values:
-# 
-# - $y^{\mathrm{ArtDsg}}_4 = 0$, `LOW_OBS`
-# - $y^{\mathrm{ArtDsg}}_4 = 1$, `MEDIUM_OBS`
-# - $y^{\mathrm{ArtDsg}}_4 = 2$, `HIGH_OBS`
-# 
-# #### 2.1.2.5 $y^{\mathrm{UsrDsg}}_1$ (FEEDBACK_OBS) [LATER]
-# It has two possible values:
-# 
-# - $y^{\mathrm{UsrDsg}}_1 = 0$, `POSITIVE_OBS`
-# - $y^{\mathrm{UsrDsg}}_1 = 1$, `NEGATIVE_OBS`
-
-# %% [markdown]
-# ### 2.1.3 Control factors
-# The action control factors to the Designer's environment (outputs from the Designer agent) are:
-# 
-# - $a^{\mathrm{DsgArt}}_1$ (NULL)
-# - $a^{\mathrm{DsgArt}}_2$ (ADJUST_UI_FEATURES_ACTION)
-# 
-# #### 2.1.3.1 $a^{\mathrm{DsgArt}}_1$ (NULL)
-# It has one possible value:
-# 
-# - $a^{\mathrm{DsgArt}}_1 = 0$, `NULL_ACT`
-# 
-# #### 2.1.3.2 $a^{\mathrm{DsgArt}}_2$ (ADJUST_UI_FEATURES_ACTION)
-# It has three possible values:
-# 
-# - $a^{\mathrm{DsgArt}}_1 = 0$, `NO_CHANGE_ACT`
-# - $a^{\mathrm{DsgArt}}_2 = 1$, `CHANGE_COLOR_THEME_ACT`
-# - $a^{\mathrm{DsgArt}}_3 = 2$, `CHANGE_TEXT_SIZE_ACT`
-
-# %%
 _labDsg = { ## labels for Designer
     "a": {
         "aᴰˢᵍᴬʳᵗ₁": [ ## "NULL"
@@ -317,7 +124,7 @@ _labDsg = { ## labels for Designer
 _yArtDsg_car,_yArtDsg_num, _sArtDsg_car,_sArtDsg_num, _aDsgArt_car,_aDsgArt_num = get_model_dimensions_from_labels(_labDsg)
 _yArtDsg_car,_yArtDsg_num, _sArtDsg_car,_sArtDsg_num, _aDsgArt_car,_aDsgArt_num
 
-# %%
+##
 # print(f'{_aDsgArt_car=}') ## cardinality of control factors
 # print(f'{_aDsgArt_num=}') ## number of control factors
 
@@ -327,28 +134,23 @@ _yArtDsg_car,_yArtDsg_num, _sArtDsg_car,_sArtDsg_num, _aDsgArt_car,_aDsgArt_num
 # print(f'{_yArtDsg_car=}') ## cardinality of observation modalities
 # print(f'{_yArtDsg_num=}') ## number of observation modalities
 
-# %%
 _aDsgArt_fac_names = list(_labDsg['a'].keys()); print(f'{_aDsgArt_fac_names=}') ## control factor names
 _sArtDsg_fac_names = list(_labDsg['s'].keys()); print(f'{_sArtDsg_fac_names=}') ## state factor names
 _s̆ArtDsg_fac_names = list(_labDsg['s̆'].keys()); print(f'{_s̆ArtDsg_fac_names=}') ## state factor names
 _yArtDsg_mod_names = list(_labDsg['y'].keys()); print(f'{_yArtDsg_mod_names=}') ## observation modality names
 
-# %% [markdown]
-# ### 2.1.4 Observation likelihood matrix, $\mathbf A$
-# We now setup the observation likelihood matrix which is the first main component of generative model.
-
-# %%
+## ==============================================================
+## Observation likelihood matrix, A
+## ==============================================================
+## We now setup the observation likelihood matrix which is the first main component 
+## of generative model.
 _Aᴬʳᵗᴰˢᵍ = utils.obj_array_zeros([[y_car] + _sArtDsg_car for y_car in _yArtDsg_car])
 print(f'{len(_Aᴬʳᵗᴰˢᵍ)=}')
-_Aᴬʳᵗᴰˢᵍ
+print(_Aᴬʳᵗᴰˢᵍ)
 
-# %% [markdown]
-# #### 2.1.4.1 Observation modality $y^{\mathrm{ArtDsg}}_1$ (EYE_TRACKING_OBS)
-
-# %% [markdown]
-# We setup this modality's likelihood mapping, corresponding to how $y^{\mathrm{ArtDsg}}_1$ (EYE_TRACKING_OBS) is related to hidden states.
-
-# %%
+## Observation modality: EYE_TRACKING_OBS
+## We setup this modality's likelihood mapping, corresponding to how EYE_TRACKING_OBS 
+## is related to hidden states.
 _Aᴬʳᵗᴰˢᵍ[0][
     _labDsg['y']['yᴬʳᵗᴰˢᵍ₁'].index('NEUTRAL_OBS'), 
     :, 
@@ -383,13 +185,9 @@ _Aᴬʳᵗᴰˢᵍ[0][
 
 _Aᴬʳᵗᴰˢᵍ[0]
 
-# %% [markdown]
-# #### 2.1.4.2 Observation modality $y^{\mathrm{ArtDsg}}_2$ (TIME_ON_TASK_OBS)
-
-# %% [markdown]
-# We setup this modality's likelihood mapping, corresponding to how $y^{\mathrm{ArtDsg}}_2$ (TIME_ON_TASK_OBS) is related to hidden states.
-
-# %%
+## Observation modality: TIME_ON_TASK_OBS
+## We setup this modality's likelihood mapping, corresponding to how 
+## TIME_ON_TASK_OBS is related to hidden states.
 _Aᴬʳᵗᴰˢᵍ[1][
     _labDsg['y']['yᴬʳᵗᴰˢᵍ₂'].index('LONG_OBS'), 
     :, 
@@ -429,13 +227,9 @@ _Aᴬʳᵗᴰˢᵍ[1][
 
 _Aᴬʳᵗᴰˢᵍ[1]
 
-# %% [markdown]
-# #### 2.1.4.3 Observation modality $y^{\mathrm{ArtDsg}}_3$ (UI_FEATURES_OBS)
-
-# %% [markdown]
-# We setup this modality's likelihood mapping, corresponding to how $y^{\mathrm{ArtDsg}}_3$ (UI_FEATURES_OBS) is related to hidden states.
-
-# %%
+## Observation modality: UI_FEATURES_OBS
+## We setup this modality's likelihood mapping, corresponding to how 
+## UI_FEATURES_OBS is related to hidden states.
 _Aᴬʳᵗᴰˢᵍ[2][
     _labDsg['y']['yᴬʳᵗᴰˢᵍ₃'].index('MINIMAL_OBS'), 
     :, 
@@ -454,39 +248,34 @@ _Aᴬʳᵗᴰˢᵍ[2][
 
 _Aᴬʳᵗᴰˢᵍ[2]
 
-# %%
+## 3 matrices of 2x3
+## 3 matrices of 2x3
+## 3 matrices of 2x3
 print(f'=== _sArtDsg_car:\n{_sArtDsg_car}')
 print(f'=== _yArtDsg_car:\n{_yArtDsg_car}')
-_Aᴬʳᵗᴰˢᵍ
+print(_Aᴬʳᵗᴰˢᵍ)
 
-# %%
 utils.is_normalized(_Aᴬʳᵗᴰˢᵍ)
 
-# %% [markdown]
-# ### 2.1.5 State transition matrix, $\mathbf B$
-
-# %%
+## ==============================================================
+## State transition matrix, B
+## ==============================================================
 _control_fac_idx_Dsg = [1] ## used in Agent constructor
 _Bᴬʳᵗᴰˢᵍ = utils.obj_array(_sArtDsg_num); print(f'{_sArtDsg_num=}')
 print(f'{len(_Bᴬʳᵗᴰˢᵍ)=}')
-_Bᴬʳᵗᴰˢᵍ
+print(_Bᴬʳᵗᴰˢᵍ)
 
-# %% [markdown]
-# #### 2.1.5.1 Control factor $a^{\mathrm{DsgArt}}_1$ (NULL)
-
-# %% [markdown]
-# We setup this factor's mapping, corresponding to how $a^{\mathrm{DsgArt}}_1$ (NULL) is related to hidden states.
-
-# %%
+## Control factor: NULL
+## We setup this factor's mapping, corresponding to how NULL is related to hidden 
+## states.
 _Bᴬʳᵗᴰˢᵍ[0] = np.zeros((_sArtDsg_car[0], _sArtDsg_car[0], _aDsgArt_car[0])); print(f'{_sArtDsg_car[0]=}, {_sArtDsg_car[0]=}, {_aDsgArt_car[0]=}')
-_Bᴬʳᵗᴰˢᵍ[0]
+print(_Bᴬʳᵗᴰˢᵍ[0])
 
-# %%
 _p_stochDsg = 0.0
 ## we cannot influence factor zero, set up the 'default' stationary dynamics - 
 ## one state just maps to itself at the next timestep with very high probability, 
-## by default. So this means the EYE_TRACKING state can change from one to another with 
-## some low probability (p_stoch)
+## by default. So this means the EYE_TRACKING state can change from one to another 
+## with some low probability (p_stoch)
 _Bᴬʳᵗᴰˢᵍ[0][
     _labDsg['s']['sᴬʳᵗᴰˢᵍ₁'].index('FOCUSED'),
     _labDsg['s']['sᴬʳᵗᴰˢᵍ₁'].index('FOCUSED'), 
@@ -509,15 +298,11 @@ _Bᴬʳᵗᴰˢᵍ[0][
     _labDsg['a']['aᴰˢᵍᴬʳᵗ₁'].index('NULL_ACT')
 ] = _p_stochDsg
 
-_Bᴬʳᵗᴰˢᵍ[0]
+print(_Bᴬʳᵗᴰˢᵍ[0])
 
-# %% [markdown]
-# #### 2.1.5.2 Control factor $a^{\mathrm{DsgArt}}_2$ (ADJUST_UI_FEATURES_ACTION)
-
-# %% [markdown]
-# We setup this factor's mapping, corresponding to how $a^{\mathrm{DsgArt}}_2$ (ADJUST_UI_FEATURES_ACTION) is related to hidden states.
-
-# %%
+## Control factor: ADJUST_UI_FEATURES_ACTION
+## We setup this factor's mapping, corresponding to how ADJUST_UI_FEATURES_ACTION 
+## is related to hidden states.
 _Bᴬʳᵗᴰˢᵍ[1] = np.zeros((_sArtDsg_car[1], _sArtDsg_car[1], _aDsgArt_car[1]))
 _Bᴬʳᵗᴰˢᵍ[1][
     _labDsg['s']['sᴬʳᵗᴰˢᵍ₂'].index('SHORT'), 
@@ -535,27 +320,27 @@ _Bᴬʳᵗᴰˢᵍ[1][
     _labDsg['a']['aᴰˢᵍᴬʳᵗ₂'].index('CHANGE_TEXT_SIZE_ACT')
 ] = 1.0
 
-_Bᴬʳᵗᴰˢᵍ[1]
+print(_Bᴬʳᵗᴰˢᵍ[1])
 
-# %%
+## 2 matrices of 2x1
+## 3 matrices of 3x3
 print(f'=== _aDsgArt_car:\n{_aDsgArt_car}')
 print(f'=== _sArtDsg_car:\n{_sArtDsg_car}')
-_Bᴬʳᵗᴰˢᵍ
+print(_Bᴬʳᵗᴰˢᵍ)
 
-# %%
 utils.is_normalized(_Bᴬʳᵗᴰˢᵍ)
 
-# %% [markdown]
-# ### 2.1.6 Prior preferences vector, $\mathbf C$
-# 
-# Now we parameterise the C vector, or the prior beliefs about observations. This will be used in the expression of the prior over actions, which is technically a softmax function of the negative expected free energy of each action. It is the equivalent of the exponentiated reward function in reinforcement learning treatments.
-# 
-
-# %%
+## ==============================================================
+## Prior preferences vector, C
+## ==============================================================
+## Now we parameterise the C vector, or the prior beliefs about observations. 
+## This will be used in the expression of the prior over actions, which is 
+## technically a softmax function of the negative expected free energy of each 
+## action. It is the equivalent of the exponentiated reward function in 
+## reinforcement learning treatments.
 _Cᴬʳᵗᴰˢᵍ = utils.obj_array_zeros([y_car for y_car in _yArtDsg_car])
-_Cᴬʳᵗᴰˢᵍ
+print(_Cᴬʳᵗᴰˢᵍ)
 
-# %%
 _Cᴬʳᵗᴰˢᵍ[1][
     _labDsg['y']['yᴬʳᵗᴰˢᵍ₂'].index('SHORT_OBS'),
 ] = 1.0
@@ -566,32 +351,29 @@ _Cᴬʳᵗᴰˢᵍ[1][
     _labDsg['y']['yᴬʳᵗᴰˢᵍ₂'].index('LONG_OBS'),
 ] = 0.0
 
-_Cᴬʳᵗᴰˢᵍ[1]
+print(_Cᴬʳᵗᴰˢᵍ[1])
 
-# %%
 ## utils.is_normalized(_Cᴬʳᵗᴰˢᵍ)
 
-# %% [markdown]
-# ### 2.1.7 Initialise an instance of the `Agent()` class:
-
-# %%
+## Initialise an instance of the `Agent()` class:
 _agtDsg = Agent(
     A=_Aᴬʳᵗᴰˢᵍ, 
     B=_Bᴬʳᵗᴰˢᵍ, 
     C=_Cᴬʳᵗᴰˢᵍ, 
     control_fac_idx=_control_fac_idx_Dsg
 )
-_agtDsg
+print(_agtDsg)
 
-# %% [markdown]
-# ## 2.2 Designer environment
-# This is the Designer agent's *generative process* for its environment.
-# 
-# It is important to note that the generative process doesn't have to be described by A and B matrices - it can just be the arbitrary 'rules of the game' that you 'write in' as a modeller. But here we just use the same transition/likelihood matrices to make the sampling process straightforward.
+#################################################################
+## Designer environment
+#################################################################
+## This is the Designer agent's *generative process* for its environment.
+## It is important to note that the generative process doesn't have to be described 
+## by A and B matrices - it can just be the arbitrary 'rules of the game' that you 
+## 'write in' as a modeller. But here we just use the same transition/likelihood 
+## matrices to make the sampling process straightforward.
 
-# %%
 ## observation/transition matrices characterising the generative process
-
 ## currently only true values of Artifact
 ## should be _Ăᴰˢᵍ to include true values of the complete Designer environment
 _Ăᴬʳᵗᴰˢᵍ = copy.deepcopy(_Aᴬʳᵗᴰˢᵍ)
@@ -601,89 +383,11 @@ _Ăᴬʳᵗᴰˢᵍ = copy.deepcopy(_Aᴬʳᵗᴰˢᵍ)
 ## should be _B̆ᴰˢᵍ to include true values of the complete Designer environment
 _B̆ᴬʳᵗᴰˢᵍ = copy.deepcopy(_Bᴬʳᵗᴰˢᵍ)
 
-# %% [markdown]
-# ## 3.1 Artifact agent
-# This is the Artifact agent's *generative model* for its environment.
 
-# %% [markdown]
-# ### 3.1.1 State factors
-# The inferred state factors from the Artifact's environment are:
-# 
-# - $s^{\mathrm{UsrArt}}_1$ (TOUCH_DATA)
-# - $s^{\mathrm{UsrArt}}_2$ (GESTURES)
-# - $s^{\mathrm{UsrArt}}_3$ (APP_SWITCHES) [LATER]
-# 
-# #### 3.1.1.1 $s^{\mathrm{UsrArt}}_1$ (TOUCH_DATA)
-# It has possible values:
-# 
-# - $s^{\mathrm{UsrArt}}_1 = 0$, `FREQUENT`
-# - $s^{\mathrm{UsrArt}}_1 = 1$, `INFREQUENT`
-# 
-# #### 3.1.1.2 $s^{\mathrm{UsrArt}}_2$ (GESTURES)
-# It has possible values:
-# 
-# - $s^{\mathrm{UsrArt}}_2 = 0$, `SWIPES`
-# - $s^{\mathrm{UsrArt}}_2 = 1$, `TAPS`
-# - $s^{\mathrm{UsrArt}}_2 = 2$, `VOICE`
-# 
-# #### 3.1.1.3 $s^{\mathrm{UsrArt}}_3$ (APP_SWITCHES) [LATER]
-# It has possible values:
-# 
-# - $s^{\mathrm{UsrArt}}_3 = 0$, `FEW`
-# - $s^{\mathrm{UsrArt}}_3 = 1$, `MANY`
-# 
+#################################################################
+## Artifact agent
+#################################################################
 
-# %% [markdown]
-# ### 3.1.2 Observation modalities 
-# The observed observation modalities from the Artifact's environment (inputs to the Artifact agent) are:
-# 
-# - $y^{\mathrm{UsrArt}}_1$ (TOUCH_DATA_OBS)
-# - $y^{\mathrm{UsrArt}}_2$ (GESTURES_OBS)
-# - $y^{\mathrm{UsrArt}}_3$ (APP_SWITCHES_OBS)
-# 
-# #### 3.1.2.1 $y^{\mathrm{UsrArt}}_1$ (TOUCH_DATA_OBS)
-# It has two possible values:
-# 
-# - $y^{\mathrm{UsrArt}}_1 = 0$, `FREQUENT_OBS`
-# - $y^{\mathrm{UsrArt}}_1 = 1$, `INFREQUENT_OBS`
-# 
-# #### 3.1.2.2 $y^{\mathrm{UsrArt}}_1$ (GESTURES_OBS)
-# It has three possible values:
-# 
-# - $y^{\mathrm{UsrArt}}_1 = 0$, `SWIPES_OBS`
-# - $y^{\mathrm{UsrArt}}_1 = 1$, `TAPS_OBS`
-# - $y^{\mathrm{UsrArt}}_1 = 2$, `VOICE_OBS`
-# 
-# #### 3.1.1.3 $s^{\mathrm{UsrArt}}_1$ (APP_SWITCHES_OBS)
-# It has three possible values: 
-# 
-# - $y^{\mathrm{UsrArt}}_3 = 0$, `FEW_OBS`
-# - $y^{\mathrm{UsrArt}}_3 = 1$, `SOME_OBS`
-# - $y^{\mathrm{UsrArt}}_3 = 2$, `MANY_OBS`
-
-# %% [markdown]
-# ### 3.1.3 Control factors
-# 
-# The 'control state' factors are the agent's representation of the control states (or actions) that _it believes_ can influence the dynamics of the hidden states - i.e. hidden state factors that are under the influence of control states are are 'controllable'. In practice, we often encode _every_ hidden state factor as being under the influence of control states, but the 'uncontrollable' hidden state factors are driven by a trivially-1-dimensional control state or action-affordance. This trivial action simply 'maintains the default environmental dynamics as they are' i.e. does nothing. This will become more clear when we set up the transition model (the `B` matrices) below.
-# 
-# The action control factors to the Artifact's environment (outputs from the Artifact agent) are:
-# 
-# - $a^{\mathrm{ArtUsr}}_1$ (NULL)
-# - $a^{\mathrm{ArtUsr}}_2$ (ADJUST_SCREEN_OUTPUT_ACTION)
-# 
-# #### 3.1.3.1 $a^{\mathrm{ArtUsr}}_1$ (NULL)
-# It has one possible value:
-# 
-# - $a^{\mathrm{ArtUsr}}_1 = 0$, `NULL_ACT`
-# 
-# #### 3.1.3.2 $a^{\mathrm{ArtUsr}}_2$ (ADJUST_SCREEN_OUTPUT_ACTION)
-# It has three possible values:
-# 
-# - $a^{\mathrm{ArtUsr}}_1 = 0$, `ADJUST_NOTIFS_ACT`
-# - $a^{\mathrm{ArtUsr}}_2 = 1$, `ADJUST_COLORS_ACT`
-# - $a^{\mathrm{ArtUsr}}_3 = 2$, `ADJUST_TEXT_SIZE_ACT`
-
-# %%
 _labArt = { ## labels for Artifact interaction
     "a": {
         "aᴬʳᵗᵁˢʳ₁": [ ## "NULL"
@@ -738,38 +442,33 @@ _labArt = { ## labels for Artifact interaction
 _yUsrArt_car,_yUsrArt_num, _sUsrArt_car,_sUsrArt_num, _aArtUsr_car,_aArtUsr_num = get_model_dimensions_from_labels(_labArt)
 _yUsrArt_car,_yUsrArt_num, _sUsrArt_car,_sUsrArt_num, _aArtUsr_car,_aArtUsr_num
 
-# %%
-print(f'{_aArtUsr_car=}') ## cardinality of control factors
-print(f'{_aArtUsr_num=}') ## number of control factors
+##
+# print(f'{_aArtUsr_car=}') ## cardinality of control factors
+# print(f'{_aArtUsr_num=}') ## number of control factors
 
-print(f'{_sUsrArt_car=}') ## cardinality of state factors
-print(f'{_sUsrArt_num=}') ## number of state factors
+# print(f'{_sUsrArt_car=}') ## cardinality of state factors
+# print(f'{_sUsrArt_num=}') ## number of state factors
 
-print(f'{_yUsrArt_car=}') ## cardinality of observation modalities
-print(f'{_yUsrArt_num=}') ## number of observation modalities
+# print(f'{_yUsrArt_car=}') ## cardinality of observation modalities
+# print(f'{_yUsrArt_num=}') ## number of observation modalities
 
-# %%
 _aArtUsr_fac_names = list(_labArt['a'].keys()); print(f'{_aArtUsr_fac_names=}') ## control factor names
 _sUsrArt_fac_names = list(_labArt['s'].keys()); print(f'{_sUsrArt_fac_names=}') ## state factor names
 _s̆UsrArt_fac_names = list(_labArt['s̆'].keys()); print(f'{_s̆UsrArt_fac_names=}') ## state factor names
 _yUsrArt_mod_names = list(_labArt['y'].keys()); print(f'{_yUsrArt_mod_names=}') ## observation modality names
 
-# %% [markdown]
-# ### 3.1.4 Observation likelihood matrix, $\mathbf A$
-# We now setup the observation likelihood matrix which is the first main component of the generative model.
-
-# %%
+## ==============================================================
+## Observation likelihood matrix, A
+## ==============================================================
+## We now setup the observation likelihood matrix which is the first main component 
+## of the generative model.
 _Aᵁˢʳᴬʳᵗ = utils.obj_array_zeros([[y_car] + _sUsrArt_car for y_car in _yUsrArt_car])
 print(f'{len(_Aᵁˢʳᴬʳᵗ)=}')
-_Aᵁˢʳᴬʳᵗ
+print(_Aᵁˢʳᴬʳᵗ)
 
-# %% [markdown]
-# #### 3.1.4.1 Observation modality $y^{\mathrm{UsrArt}}_1$ (TOUCH_DATA_OBS)
-
-# %% [markdown]
-# We setup this modality's likelihood mapping, corresponding to how $y^{\mathrm{UsrArt}}_1$ (TOUCH_DATA_OBS) is related to hidden states.
-
-# %%
+## Observation modality: TOUCH_DATA_OBS
+## We setup this modality's likelihood mapping, corresponding to how TOUCH_DATA_OBS 
+## is related to hidden states.
 _Aᵁˢʳᴬʳᵗ[0][
     _labArt['y']['yᵁˢʳᴬʳᵗ₁'].index('INFREQUENT_OBS'), 
     :, 
@@ -802,15 +501,11 @@ _Aᵁˢʳᴬʳᵗ[0][
     _labArt['s']['sᵁˢʳᴬʳᵗ₂'].index('VOICE')
 ] = 0.2
 
-_Aᵁˢʳᴬʳᵗ[0]
+print(_Aᵁˢʳᴬʳᵗ[0])
 
-# %% [markdown]
-# #### 3.1.4.2 Observation modality $y^{\mathrm{UsrArt}}_2$ (GESTURES_OBS)
-
-# %% [markdown]
-# We setup this modality's likelihood mapping, corresponding to how $y^{\mathrm{UsrArt}}_2$ (GESTURES_OBS) is related to hidden states.
-
-# %%
+## Observation modality: GESTURES_OBS
+## We setup this modality's likelihood mapping, corresponding to how GESTURES_OBS 
+## is related to hidden states.
 _Aᵁˢʳᴬʳᵗ[1][
     _labArt['y']['yᵁˢʳᴬʳᵗ₂'].index('VOICE_OBS'), 
     :, 
@@ -848,15 +543,11 @@ _Aᵁˢʳᴬʳᵗ[1][
     _labArt['s']['sᵁˢʳᴬʳᵗ₂'].index('TAPS')
 ] = _INFREQUENT_MAPPING_ART[1]
 
-_Aᵁˢʳᴬʳᵗ[1]
+print(_Aᵁˢʳᴬʳᵗ[1])
 
-# %% [markdown]
-# #### 3.1.4.3 Observation modality $y^{\mathrm{UsrArt}}_3$ (APP_SWITCHES_OBS)
-
-# %% [markdown]
-# We setup this modality's likelihood mapping, corresponding to how $y^{\mathrm{UsrArt}}_3$ (APP_SWITCHES_OBS) is related to hidden states.
-
-# %%
+## Observation modality: APP_SWITCHES_OBS
+## We setup this modality's likelihood mapping, corresponding to how 
+## APP_SWITCHES_OBS is related to hidden states.
 _Aᵁˢʳᴬʳᵗ[2][
     _labArt['y']['yᵁˢʳᴬʳᵗ₃'].index('FEW_OBS'), 
     :, 
@@ -875,40 +566,31 @@ _Aᵁˢʳᴬʳᵗ[2][
 
 _Aᵁˢʳᴬʳᵗ[2]
 
-# %%
 ## 3 matrices of 2x3
 ## 3 matrices of 2x3
 ## 3 matrices of 2x3
 print(f'=== _sUsrArt_car:\n{_sUsrArt_car}')
 print(f'=== _yUsrArt_car:\n{_yUsrArt_car}')
-_Aᵁˢʳᴬʳᵗ
+print(_Aᵁˢʳᴬʳᵗ)
 
-# %%
 utils.is_normalized(_Aᵁˢʳᴬʳᵗ)
 
-# %% [markdown]
-# ### 3.1.5 State transition matrix, $\mathbf B$
-
-# %%
+## ==============================================================
+## State transition matrix, B
+## ==============================================================
 _Bᵁˢʳᴬʳᵗ = utils.obj_array(_sUsrArt_num); print(f'{_sUsrArt_num=}')
 print(f'{len(_Bᵁˢʳᴬʳᵗ)=}')
-_Bᵁˢʳᴬʳᵗ
+print(_Bᵁˢʳᴬʳᵗ)
 
-# %% [markdown]
-# #### 3.1.5.1 Control factor $a^{\mathrm{ArtUsr}}_1$ (NULL)
-
-# %%
+## Control factor: NULL
 _Bᵁˢʳᴬʳᵗ[0] = np.zeros((_sUsrArt_car[0], _sUsrArt_car[0], _aArtUsr_car[0])); print(f'{_sUsrArt_car[0]=}, {_sUsrArt_car[0]=}, {_aArtUsr_car[0]=}')
-_Bᵁˢʳᴬʳᵗ[0]
+print(_Bᵁˢʳᴬʳᵗ[0])
 
-# %%
 _p_stochArt = 0.0
-
 ## we cannot influence factor zero, set up the 'default' stationary dynamics - 
 ## one state just maps to itself at the next timestep with very high probability, 
 ## by default. So this means the TOUCH_DATA state can change from one to another with 
 ## some low probability (p_stoch)
-
 _Bᵁˢʳᴬʳᵗ[0][
     _labArt['s']['sᵁˢʳᴬʳᵗ₁'].index('FREQUENT'),
     _labArt['s']['sᵁˢʳᴬʳᵗ₁'].index('FREQUENT'), 
@@ -935,15 +617,10 @@ _Bᵁˢʳᴬʳᵗ[0][
 
 _Bᵁˢʳᴬʳᵗ[0]
 
-# %% [markdown]
-# #### 3.1.5.2 Control factor $a^{\mathrm{ArtUsr}}_2$ (ADJUST_SCREEN_OUTPUT_ACTION)
-
-# %% [markdown]
-# We setup this factor's mapping, corresponding to how $a^{\mathrm{ArtUsr}}_2$ (ADJUST_SCREEN_OUTPUT_ACTION) is related to hidden states.
-
-# %%
+## Control factor: ADJUST_SCREEN_OUTPUT_ACTION
+## We setup this factor's mapping, corresponding to how 
+## ADJUST_SCREEN_OUTPUT_ACTION is related to hidden states.
 _Bᵁˢʳᴬʳᵗ[1] = np.zeros((_sUsrArt_car[1], _sUsrArt_car[1], _aArtUsr_car[1]))
-
 _Bᵁˢʳᴬʳᵗ[1][
     _labArt['s']['sᵁˢʳᴬʳᵗ₂'].index('SWIPES'), 
     :, 
@@ -960,28 +637,27 @@ _Bᵁˢʳᴬʳᵗ[1][
     _labArt['a']['aᴬʳᵗᵁˢʳ₂'].index('ADJUST_TEXT_SIZE_ACT')
 ] = 1.0
 
-_Bᵁˢʳᴬʳᵗ[1]
+print(_Bᵁˢʳᴬʳᵗ[1])
 
-# %%
 ## 2 matrices of 2x1
 ## 3 matrices of 3x3
 print(f'=== _aArtUsr_car:\n{_aArtUsr_car}')
 print(f'=== _sUsrArt_car:\n{_sUsrArt_car}')
-_Bᵁˢʳᴬʳᵗ
+print(_Bᵁˢʳᴬʳᵗ)
 
-# %%
 utils.is_normalized(_Bᵁˢʳᴬʳᵗ)
 
-# %% [markdown]
-# ### 3.1.6 Prior preferences vector, $\mathbf C$
-# 
-# Now we parameterise the C vector, or the prior beliefs about observations. This will be used in the expression of the prior over actions, which is technically a softmax function of the negative expected free energy of each action. It is the equivalent of the exponentiated reward function in reinforcement learning treatments.
-
-# %%
+## ==============================================================
+## Prior preferences vector, C
+## ==============================================================
+## Now we parameterise the C vector, or the prior beliefs about observations. 
+## This will be used in the expression of the prior over actions, which is 
+## technically a softmax function of the negative expected free energy of each 
+## action. It is the equivalent of the exponentiated reward function in 
+## reinforcement learning treatments.
 _Cᵁˢʳᴬʳᵗ = utils.obj_array_zeros([y_car for y_car in _yUsrArt_car])
-_Cᵁˢʳᴬʳᵗ
+print(_Cᵁˢʳᴬʳᵗ)
 
-# %%
 _Cᵁˢʳᴬʳᵗ[1][
     _labArt['y']['yᵁˢʳᴬʳᵗ₂'].index('SWIPES_OBS'),
 ] = 1.0
@@ -994,76 +670,34 @@ _Cᵁˢʳᴬʳᵗ[1][
 
 _Cᵁˢʳᴬʳᵗ[1]
 
-# %%
 ## utils.is_normalized(_Cᵁˢʳᴬʳᵗ)
 
-# %% [markdown]
-# ### 3.1.7 Initialise an instance of the `Agent()` class:
-
-# %%
+## Initialise an instance of the `Agent()` class:
 _agtArt = Agent(
     A=_Aᵁˢʳᴬʳᵗ, 
     B=_Bᵁˢʳᴬʳᵗ, 
     C=_Cᵁˢʳᴬʳᵗ, 
 )
-_agtArt
+print(_agtArt)
 
-# %% [markdown]
-# ## 3.2 Artifact environment
-# 
-# This is the Artifact agent's *generative process* for its environment.
-# 
-# It is important to note that the generative process doesn't have to be described by A and B matrices - it can just be the arbitrary 'rules of the game' that you 'write in' as a modeller. But here we just use the same transition/likelihood matrices to make the sampling process straightforward.
+#################################################################
+## Artifact environment
+#################################################################
+## This is the Artifact agent's *generative process* for its environment.
+## It is important to note that the generative process doesn't have to be described 
+## by A and B matrices - it can just be the arbitrary 'rules of the game' that you 
+## 'write in' as a modeller. But here we just use the same transition/likelihood 
+## matrices to make the sampling process straightforward.
 
-# %%
 ## observation/transition matrices characterising the generative process
 _Ăᵁˢʳᴬʳᵗ = copy.deepcopy(_Aᵁˢʳᴬʳᵗ)
 _B̆ᵁˢʳᴬʳᵗ = copy.deepcopy(_Bᵁˢʳᴬʳᵗ)
 
-# %% [markdown]
-# ## 4.1 User agent
-# This is the User agent's *generative model* for its environment.
 
-# %% [markdown]
-# ### 4.1.1 State factors
-# The inferred state factors from the User's environment are:
-# 
-# - $s^{\mathrm{ArtUsr}}_1$ (CONVERSION_POTENTIAL)
-# 
-# #### 4.1.1.1 $s^{\mathrm{ArtUsr}}_1$ (CONVERSION_POTENTIAL)
-# It has possible values:
-# 
-# - $s^{\mathrm{ArtUsr}}_1 = 0$, `LOW`
-# - $s^{\mathrm{ArtUsr}}_1 = 1$, `HIGH`
+#################################################################
+## User agent
+#################################################################
 
-# %% [markdown]
-# ### 4.1.2 Observation modalities 
-# The observed observation modalities from the User's environment are:
-# 
-# - $y^{\mathrm{ArtUsr}}_1$ (CONVERSION_POTENTIAL_OBS)
-# 
-# #### 4.1.2.1 $y^{\mathrm{ArtUsr}}_1$ (CONVERSION_POTENTIAL_OBS)
-# It has two possible values:
-# 
-# - $y^{\mathrm{ArtUsr}}_1 = 0$, `LOW_OBS`
-# - $y^{\mathrm{ArtUsr}}_1 = 1$, `HIGH_OBS`
-# 
-
-# %% [markdown]
-# ### 4.1.3 Control factors
-# 
-# The action control factors to the User's environment are:
-# 
-# - $a^{\mathrm{UsrArt}}_1$ (ENGAGE_ACTION)
-# 
-# #### 4.1.3.1 $a^{\mathrm{UsrArt}}_1$ (ENGAGE_ACTION)
-# It has three possible values:
-# 
-# - $a^{\mathrm{UsrArt}}_1 = 0$, `SIGNUP_ACT`
-# - $a^{\mathrm{UsrArt}}_2 = 1$, `CONTACT_REQUEST_ACT`
-# - $a^{\mathrm{UsrArt}}_3 = 2$, `PURCHASE_ACT`
-
-# %%
 _labUsr = { ## labels for User interaction
     "a": {
         "aᵁˢʳᴬʳᵗ₁": [ ## "ENGAGE_ACTION"
@@ -1095,38 +729,33 @@ _labUsr = { ## labels for User interaction
 _yArtUsr_car,_yArtUsr_num, _sArtUsr_car,_sArtUsr_num, _aUsrArt_car,_aUsrArt_num = get_model_dimensions_from_labels(_labUsr)
 _yArtUsr_car,_yArtUsr_num, _sArtUsr_car,_sArtUsr_num, _aUsrArt_car,_aUsrArt_num
 
-# %%
-print(f'{_aUsrArt_car=}') ## cardinality of control factors
-print(f'{_aUsrArt_num=}') ## number of control factors
+##
+# print(f'{_aUsrArt_car=}') ## cardinality of control factors
+# print(f'{_aUsrArt_num=}') ## number of control factors
 
-print(f'{_sArtUsr_car=}') ## cardinality of state factors
-print(f'{_sArtUsr_num=}') ## number of state factors
+# print(f'{_sArtUsr_car=}') ## cardinality of state factors
+# print(f'{_sArtUsr_num=}') ## number of state factors
 
-print(f'{_yArtUsr_car=}') ## cardinality of observation modalities
-print(f'{_yArtUsr_num=}') ## number of observation modalities
+# print(f'{_yArtUsr_car=}') ## cardinality of observation modalities
+# print(f'{_yArtUsr_num=}') ## number of observation modalities
 
-# %%
 _aUsrArt_fac_names = list(_labUsr['a'].keys()); print(f'{_aUsrArt_fac_names=}') ## control factor names
 _sArtUsr_fac_names = list(_labUsr['s'].keys()); print(f'{_sArtUsr_fac_names=}') ## state factor names
 _s̆ArtUsr_fac_names = list(_labUsr['s̆'].keys()); print(f'{_s̆ArtUsr_fac_names=}') ## state factor names
 _yArtUsr_mod_names = list(_labUsr['y'].keys()); print(f'{_yArtUsr_mod_names=}') ## observation modality names
 
-# %% [markdown]
-# ### 4.1.4 Observation likelihood matrix, $\mathbf A$
-# We now setup the observation likelihood matrix which is the first main component of the generative model.
-
-# %%
+## ==============================================================
+## Observation likelihood matrix, A
+## ==============================================================
+## We now setup the observation likelihood matrix which is the first main component 
+## of the generative model.
 _Aᴬʳᵗᵁˢʳ = utils.obj_array_zeros([[y_car] + _sArtUsr_car for y_car in _yArtUsr_car])
 print(f'{len(_Aᴬʳᵗᵁˢʳ)=}')
-_Aᴬʳᵗᵁˢʳ
+print(_Aᴬʳᵗᵁˢʳ)
 
-# %% [markdown]
-# #### 4.1.4.1 Observation modality $y^{\mathrm{ArtUsr}}_1$ (CONVERSION_POTENTIAL_OBS)
-
-# %% [markdown]
-# We setup this modality's likelihood mapping, corresponding to how $y^{\mathrm{ArtUsr}}_1$ (CONVERSION_POTENTIAL_OBS) is related to hidden states.
-
-# %%
+## Observation modality: CONVERSION_POTENTIAL_OBS
+## We setup this modality's likelihood mapping, corresponding to how 
+## CONVERSION_POTENTIAL_OBS is related to hidden states.
 _Aᴬʳᵗᵁˢʳ[0][
     _labUsr['y']['yᴬʳᵗᵁˢʳ₁'].index('LOW_OBS'),
     _labUsr['s']['sᴬʳᵗᵁˢʳ₁'].index('LOW')
@@ -1145,34 +774,26 @@ _Aᴬʳᵗᵁˢʳ[0][
     _labUsr['s']['sᴬʳᵗᵁˢʳ₁'].index('HIGH')
 ] = 0.8
 
-_Aᴬʳᵗᵁˢʳ[0]
+print(_Aᴬʳᵗᵁˢʳ[0])
 
-# %%
 ## 3 vectors of 2
 print(f'=== _sArtUsr_car:\n{_sArtUsr_car}')
 print(f'=== _yArtUsr_car:\n{_yArtUsr_car}')
-_Aᴬʳᵗᵁˢʳ
+print(_Aᴬʳᵗᵁˢʳ)
 
-# %%
 utils.is_normalized(_Aᴬʳᵗᵁˢʳ)
 
-# %% [markdown]
-# ### 4.1.5 State transition matrix, $\mathbf B$
-
-# %%
+## ==============================================================
+## State transition matrix, B
+## ==============================================================
 _Bᴬʳᵗᵁˢʳ = utils.obj_array(_sArtUsr_num); print(f'{_sArtUsr_num=}')
 print(f'{len(_Bᴬʳᵗᵁˢʳ)=}')
-_Bᴬʳᵗᵁˢʳ
+print(_Bᴬʳᵗᵁˢʳ)
 
-# %% [markdown]
-# #### 4.1.5.1 Control factor $a^{\mathrm{UsrArt}}_1$ (ENGAGE_ACTION)
-
-# %% [markdown]
-# We setup this factor's mapping, corresponding to how $a^{\mathrm{UsrArt}}_1$ (ENGAGE_ACTION) is related to hidden states.
-
-# %%
+## Control factor: ENGAGE_ACTION
+## We setup this factor's mapping, corresponding to how ENGAGE_ACTION is related 
+## to hidden states.
 _Bᴬʳᵗᵁˢʳ[0] = np.zeros((_sArtUsr_car[0], _sArtUsr_car[0], _aUsrArt_car[0]))
-
 _Bᴬʳᵗᵁˢʳ[0][
     _labUsr['s']['sᴬʳᵗᵁˢʳ₁'].index('LOW'), 
     :, 
@@ -1189,27 +810,26 @@ _Bᴬʳᵗᵁˢʳ[0][
     _labUsr['a']['aᵁˢʳᴬʳᵗ₁'].index('PURCHASE_ACT')
 ] = 1.0
 
-_Bᴬʳᵗᵁˢʳ[0]
+print(_Bᴬʳᵗᵁˢʳ[0])
 
-# %%
 ## 2 matrices of 2x3
 print(f'=== _aUsrArt_car:\n{_aUsrArt_car}')
 print(f'=== _sArtUsr_car:\n{_sArtUsr_car}')
-_Bᴬʳᵗᵁˢʳ
+print(_Bᴬʳᵗᵁˢʳ)
 
-# %%
 utils.is_normalized(_Bᴬʳᵗᵁˢʳ)
 
-# %% [markdown]
-# ### 4.1.6 Prior preferences vector, $\mathbf C$
-# 
-# Now we parameterise the C vector, or the prior beliefs about observations. This will be used in the expression of the prior over actions, which is technically a softmax function of the negative expected free energy of each action. It is the equivalent of the exponentiated reward function in reinforcement learning treatments.
-
-# %%
+## ==============================================================
+## Prior preferences vector, C
+## ==============================================================
+## Now we parameterise the C vector, or the prior beliefs about observations. 
+## This will be used in the expression of the prior over actions, which is 
+## technically a softmax function of the negative expected free energy of each 
+## action. It is the equivalent of the exponentiated reward function in 
+## reinforcement learning treatments.
 _Cᴬʳᵗᵁˢʳ = utils.obj_array_zeros([y_car for y_car in _yArtUsr_car])
-_Cᴬʳᵗᵁˢʳ
+print(_Cᴬʳᵗᵁˢʳ)
 
-# %%
 _Cᴬʳᵗᵁˢʳ[0][
     _labUsr['y']['yᴬʳᵗᵁˢʳ₁'].index('LOW_OBS'),
 ] = 1.0
@@ -1222,42 +842,40 @@ _Cᴬʳᵗᵁˢʳ[0][
 
 _Cᴬʳᵗᵁˢʳ[0]
 
-# %%
 ## utils.is_normalized(_Cᴬʳᵗᵁˢʳ)
 
-# %% [markdown]
-# ### 4.1.7 Initialise an instance of the `Agent()` class:
-
-# %%
+## Initialise an instance of the `Agent()` class:
 _agtUsr = Agent(
     A=_Aᴬʳᵗᵁˢʳ, 
     B=_Bᴬʳᵗᵁˢʳ, 
     C=_Cᴬʳᵗᵁˢʳ, 
 )
-_agtUsr
+print(_agtUsr)
 
-# %% [markdown]
-# ## 4.2 User environment
-# 
-# This is the User agent's *generative process* for its environment.
-# 
-# It is important to note that the generative process doesn't have to be described by A and B matrices - it can just be the arbitrary 'rules of the game' that you 'write in' as a modeller. But here we just use the same transition/likelihood matrices to make the sampling process straightforward.
+#################################################################
+## User environment
+#################################################################
+## This is the User agent's *generative process* for its environment. 
+## It is important to note that the generative process doesn't have to be described 
+## by A and B matrices - it can just be the arbitrary 'rules of the game' that you 
+## 'write in' as a modeller. But here we just use the same transition/likelihood 
+## matrices to make the sampling process straightforward.
 
-# %%
 ## observation/transition matrices characterising the generative process
+## These copies are not used currently:
 _Ăᴬʳᵗᵁˢʳ = copy.deepcopy(_Aᴬʳᵗᵁˢʳ)
 _B̆ᴬʳᵗᵁˢʳ = copy.deepcopy(_Bᴬʳᵗᵁˢʳ)
 
-# %% [markdown]
-# # 5 Run simulation
 
-# %% [markdown]
-# Initialise the simulation
+#################################################################
+## Run simulation
+#################################################################
 
-# %%
+## ==============================================================
+## Initialise the simulation
+## ==============================================================
 _T = 20 ## number of timesteps in the simulation
 
-# %%
 ## Designer
 _s̆ᴬʳᵗᴰˢᵍ = [ ## initial (true) state
     _labDsg['s̆']['s̆ᴬʳᵗᴰˢᵍ₁'].index('FOCUSED'), 
@@ -1270,7 +888,6 @@ _yᴬʳᵗᴰˢᵍ = [ ## initial observation
     _labDsg['y']['yᴬʳᵗᴰˢᵍ₃'].index('MINIMAL_OBS')
 ]; print(f'{_yᴬʳᵗᴰˢᵍ=}')
 
-# %%
 ## Artifact
 _s̆ᵁˢʳᴬʳᵗ = [ ## initial (true) state
     _labArt['s̆']['s̆ᵁˢʳᴬʳᵗ₁'].index('FREQUENT'),
@@ -1283,7 +900,6 @@ _yᵁˢʳᴬʳᵗ = [ ## initial observation
     _labArt['y']['yᵁˢʳᴬʳᵗ₃'].index('FEW_OBS')
 ]; print(f'{_yᵁˢʳᴬʳᵗ=}')
 
-# %%
 ## User
 _s̆ᴬʳᵗᵁˢʳ = [ ## initial (true) state
     _labUsr['s̆']['s̆ᴬʳᵗᵁˢʳ₁'].index('LOW')
@@ -1293,31 +909,30 @@ _yᴬʳᵗᵁˢʳ = [ ## initial observation
     _labUsr['y']['yᴬʳᵗᵁˢʳ₁'].index('LOW_OBS')
 ]; print(f'{_yᴬʳᵗᵁˢʳ=}')
 
-# %% [markdown]
-# Create some string names for the state, observation, and action indices to help with print statements
+## Create some string names for the state, observation, and action indices to 
+## help with print statements
 
-# %%
 ## Designer
 _aDsgArt_val_names = [_labDsg['a'][cfn] for cfn in _aDsgArt_fac_names]; print(f'{_aDsgArt_val_names=}')
 _sArtDsg_val_names = [_labDsg['s'][sfn] for sfn in _sArtDsg_fac_names]; print(f'{_sArtDsg_val_names=}')
 _s̆ArtDsg_val_names = [_labDsg['s̆'][sfn] for sfn in _s̆ArtDsg_fac_names]; print(f'{_s̆ArtDsg_val_names=}')
 _yArtDsg_val_names = [_labDsg['y'][omn] for omn in _yArtDsg_mod_names]; print(f'{_yArtDsg_val_names=}')
 
-# %%
 ## Artifact
 _aArtUsr_val_names = [_labArt['a'][cfn] for cfn in _aArtUsr_fac_names]; print(f'{_aArtUsr_val_names=}')
 _sUsrArt_val_names = [_labArt['s'][sfn] for sfn in _sUsrArt_fac_names]; print(f'{_sUsrArt_val_names=}')
 _s̆UsrArt_val_names = [_labArt['s̆'][sfn] for sfn in _s̆UsrArt_fac_names]; print(f'{_s̆UsrArt_val_names=}')
 _yUsrArt_val_names = [_labArt['y'][omn] for omn in _yUsrArt_mod_names]; print(f'{_yUsrArt_val_names=}')
 
-# %%
 ## User
 _aUsrArt_val_names = [_labUsr['a'][cfn] for cfn in _aUsrArt_fac_names]; print(f'{_aUsrArt_val_names=}')
 _sArtUsr_val_names = [_labUsr['s'][sfn] for sfn in _sArtUsr_fac_names]; print(f'{_sArtUsr_val_names=}')
 _s̆ArtUsr_val_names = [_labUsr['s̆'][sfn] for sfn in _s̆ArtUsr_fac_names]; print(f'{_s̆ArtUsr_val_names=}')
 _yArtUsr_val_names = [_labUsr['y'][omn] for omn in _yArtUsr_mod_names]; print(f'{_yArtUsr_val_names=}')
 
-# %%
+## ==============================================================
+## The functions handling an iteration loop
+## ==============================================================
 def act(agt, a_facs, a_fac_names, a_val_names, s̆_fac_names, t):
     if(t == 0): ## at t=0 agent has no q_pi yet, so no .sample_action()
         action = np.array([0.0, 0.0, 0.0])
@@ -1390,7 +1005,9 @@ def infer(agt, s_facs, y, s_fac_names, lab):
     for sfi, sfn in enumerate(s_fac_names):
         s_facs[sfn].append( lab['s'][sfn][int(np.argmax(belief_state[sfi].round(3).T))] )
 
-# %%
+## ==============================================================
+## History data
+## ==============================================================
 _aDsgArt_facs = {'aᴰˢᵍᴬʳᵗ₁': [], 'aᴰˢᵍᴬʳᵗ₂': []}
 _sArtDsg_facs = {'sᴬʳᵗᴰˢᵍ₁': [], 'sᴬʳᵗᴰˢᵍ₂': []}
 _s̆ArtDsg_facs = {'s̆ᴬʳᵗᴰˢᵍ₁': [], 's̆ᴬʳᵗᴰˢᵍ₂': []}
@@ -1416,7 +1033,9 @@ _GArtNegs = []
 _qUsrIpiIs = []
 _GUsrNegs = []
 
-# %%
+## ==============================================================
+## The function driving the simulation
+## ==============================================================
 def simulate(T):
     for t in range(T):
         print(f"\nTime {t}:")
@@ -1465,7 +1084,9 @@ def simulate(T):
     visualize_Artifact_User()
     visualize_User_Artifact()
 
-# %%
+## ==============================================================
+## The visualization functions
+## ==============================================================
 def visualize_Designer_Artifact():
     colors = [
     {'NULL_ACT':'black'}, ## aDsgArt_1
@@ -1762,12 +1383,11 @@ def visualize_Artifact_User():
     ax[i].set_xlabel('$\mathrm{time,}\ t$', fontweight='bold', fontsize=12)
 
     plt.tight_layout()
-    plt.subplots_adjust(hspace=0.1) ## Adjust this value as needed
+    plt.subplots_adjust(hspace=0.1)
     plt.show()
     plt.savefig("Artifact-User.png")
     print("Plot saved as 'Artifact-User.png'.")    
 
-# %%
 def visualize_User_Artifact():
     colors = [
     {'SIGNUP_ACT':'red', 'CONTACT_REQUEST_ACT':'green', 'PURCHASE_ACT': 'blue'}, ## aUsrArt_1
@@ -1845,12 +1465,14 @@ def visualize_User_Artifact():
     ax[i].set_xlabel('$\mathrm{time,}\ t$', fontweight='bold', fontsize=12)
 
     plt.tight_layout()
-    plt.subplots_adjust(hspace=0.1) ## Adjust this value as needed
+    plt.subplots_adjust(hspace=0.1)
     plt.show()
     plt.savefig("User-Artifact.png")
     print("Plot saved as 'User-Artifact.png'.")
 
-# %%
+## ==============================================================
+## The main() function driving the deployed Python package
+## ==============================================================
 def main():
     parser = argparse.ArgumentParser(
         description="""
@@ -1871,7 +1493,3 @@ python -m dau-active-inference --duration 20
 if __name__ == "__main__":
     main()
 
-
-
-
-# %%

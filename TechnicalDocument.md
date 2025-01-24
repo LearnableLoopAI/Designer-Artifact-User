@@ -1202,6 +1202,7 @@ It is important to note that the generative process doesn't have to be described
 
 ```
 ## observation/transition matrices characterising the generative process
+## These copies are not used currently:
 _Ăᴬʳᵗᵁˢʳ = copy.deepcopy(_Aᴬʳᵗᵁˢʳ)
 _B̆ᴬʳᵗᵁˢʳ = copy.deepcopy(_Bᴬʳᵗᵁˢʳ)
 ```
@@ -1279,7 +1280,7 @@ _s̆ArtUsr_val_names = [_labUsr['s̆'][sfn] for sfn in _s̆ArtUsr_fac_names]; pr
 _yArtUsr_val_names = [_labUsr['y'][omn] for omn in _yArtUsr_mod_names]; print(f'{_yArtUsr_val_names=}')
 ```
 
-## 5.2 The functions handling an interation loop
+## 5.2 The functions handling an iteration loop
 ```
 def act(agt, a_facs, a_fac_names, a_val_names, s̆_fac_names, t):
     if(t == 0): ## at t=0 agent has no q_pi yet, so no .sample_action()
