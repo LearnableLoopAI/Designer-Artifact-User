@@ -1478,7 +1478,7 @@ def main():
         description="""
 A Designer-Artifact-User interaction simulation script.
 To execute:
-python -m dau-active-inference --duration 20
+dau-active-inference --duration 20
 """)
     parser.add_argument(
         "--duration", 
@@ -1492,4 +1492,3 @@ python -m dau-active-inference --duration 20
 
 if __name__ == "__main__":
     main()
-
