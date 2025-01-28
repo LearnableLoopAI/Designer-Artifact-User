@@ -3,23 +3,28 @@ Multi-agent active inference with PyMDP
 
 # Designer-Artifact-User: Installation Instructions
 
-This guide provides step-by-step instructions to install and set up the **Designer-Artifact-User** application on an Ubuntu 24.04 Linux server.
+This guide provides step-by-step instructions to install and set up the **Designer-Artifact-User** application on an Ubuntu 24.04 Linux system. For other operating systems, it should be easy to modify the appropriate commands.
 
 ---
 ## Purpose of dau-active-inference package
 
 The purpose of the dau-active-inference package is to allow a user to run an active inference based simulation for three interacting agents.
 
-## dau-active-inference package dependencies
+## Most important dau-active-inference package dependencies
 
 - dau-active-inference depends on:
+   - pymdp
    - numpy
    - matplotlib
-   - pymdp
+   - pandas
    - inferactively-pymdp
-      - pytorch
+   - pymdp
+   - torch
+   
 
 ## Installation Instructions
+
+Please note that the installation will need about 6 GB of disk space. The installation process may take up to 15-20 minutes to complete if you do not have any of the dependencies installed.
 
 Follow these steps in sequence:
 
@@ -41,15 +46,11 @@ Follow these steps in sequence:
 
 5. Run dau-active-inference package with --help flag to see switch options:
    ```bash
-   dau-active-inference --duration 20
-
-6. Uninstall dau-active-inference package and clean .venv environment like so:
-   ```bash
-   pip uninstall dau-active-inference && pip freeze | xargs pip uninstall -y
+   dau-active-inference --help
 
 ## How to run simulations with the package from PyPI
 
-7. To reach PyPI repository, go to: https://pypi.org/project/dau-active-inference/
+6. To reach the PyPI repository, go to: https://pypi.org/project/dau-active-inference/
    ```bash
    dau-active-inference --duration 20
 
@@ -64,4 +65,4 @@ If you are more technically-minded and understand the basic operation of the pym
 
 ## How to run simulations with the notebook file Designer-Artifact-User.ipynb
 
-If you are more technically-minded and understand the basic operation of the pymdp package, you are welcome to modify the Designer-Artifact-User.ipynb notebook file.
+If you are more technically-minded and understand the basic operation of the pymdp package, you are welcome to execute/modify the Designer-Artifact-User.ipynb notebook file.
